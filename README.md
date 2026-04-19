@@ -57,3 +57,74 @@ To successfully query the agent, follow these sequential steps:
 * **DON'T** start asking questions in Tab 3 before clicking "Build Vector Store" in Tab 2. The system doesn't have a searchable brain until you complete the embedding phase.
 * **DON'T** put non-text files (like images or executables) in the `data/` folder, as the built-in PyPDFLoader and TextLoader cannot process them.
 * **DON'T** share your `faiss_index` folder publicly if your scanned PDFs contained sensitive data. The index can be reverse-engineered to extract the original text.
+
+
+flowchart TD
+    %% Define styles
+    classDef default fill:#f9f9f9,stroke:#333,stroke-width:1px;
+    classDef user fill:#e1f5fe,stroke:#0288d1,stroke-width:2px;
+    classDef streamlit fill:#ffe0b2,stroke:#f57c00,stroke-width:2px;
+    classDef google fill:#e8f5e9,stroke:#388e3c,stroke-width:2px;
+    classDef storage fill:#ede7f6,stroke:#512da8,stroke-width:2px;
+    classDef security fill:#ffebee,stroke:#d32f2f,stroke-width:2px;
+    
+    User((User)):::user
+    
+    subgraph UI ["Streamlit Frontend (app.py)"]
+        UI_Docs[Document Setup Tab]:::streamlit
+        UI_Chunk[Embeddings Tab]:::streamlit
+        UI_Chat[Chat Interface Tab]:::streamlit
+        UI_Logs[System Logs Tab]:::streamlit
+    end
+
+    subgraph Data_Processing ["Data Ingestion"]
+        DocLoaders["Document Loaders<br>(PyPDF, TextLoader)"]
+        Splitters["Text Splitters"]
+    end
+    
+    subgraph VectorDB ["FAISS Store"]
+        CacheCheck{"Cache Metadata<br>Match?"}
+        FAISSSave[(Save faiss_index)]:::storage
+        FAISSLoad[(Load faiss_index)]:::storage
+    end
+
+    subgraph External_NLP ["Google Generative AI"]
+        EmbeddingAPI["Embedding API<br>(gemini-embedding-001)"]:::google
+        LLM["Generative Model API<br>(Gemini Pro)"]:::google
+    end
+
+    subgraph Middlewares ["Security & Routing"]
+        GuardIn{"Input Guardrail<br>(Regex check)"}:::security
+        Agent[Agent Router<br>(agent_tools.py)]
+        GuardOut{"Output Guardrail<br>(Regex check)"}:::security
+    end
+
+    User -->|Load Files| UI_Docs
+    UI_Docs --> DocLoaders
+    DocLoaders --> Splitters
+    Splitters --> UI_Chunk
+    UI_Chunk -->|"Build Vector Store"| CacheCheck
+    
+    CacheCheck -- "No (New Docs/Params)" --> EmbeddingAPI
+    EmbeddingAPI --> FAISSSave
+    
+    CacheCheck -- "Yes (Exact Match)" --> FAISSLoad
+
+    User -->|Ask Question| UI_Chat
+    UI_Chat --> GuardIn
+    
+    GuardIn -- Fails --> BlockIn[Block & Log]:::security
+    GuardIn -- Passes --> Agent
+    
+    FAISSLoad -.->|Search Relevant Chunks| Agent
+    FAISSSave -.->|Search Relevant Chunks| Agent
+    
+    Agent <-->|Context & Query| LLM
+    
+    Agent --> GuardOut
+    GuardOut -- Fails --> BlockOut[Block & Log]:::security
+    GuardOut -- Passes --> FinalOutput[Display Answer]
+    
+    BlockIn --> UI_Logs
+    BlockOut --> UI_Logs
+    FinalOutput --> UI_Chat

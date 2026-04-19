@@ -1,6 +1,7 @@
 import streamlit as st
 import os
 import time
+import json
 import pandas as pd
 from dotenv import load_dotenv
 
@@ -23,7 +24,9 @@ if "chunks" not in st.session_state: st.session_state.chunks = []
 if "vector_store" not in st.session_state: st.session_state.vector_store = None
 if "logs" not in st.session_state: st.session_state.logs = []
 
-api_key = st.sidebar.text_input("Google Gemini API Key:", type="password", value=os.getenv("GOOGLE_API_KEY", ""))
+api_key_input = st.sidebar.text_input("Google Gemini API Key (Optional if in .env):", type="password")
+api_key = api_key_input or os.getenv("GOOGLE_API_KEY", "")
+
 if api_key:
     # Do not set global os.environ to prevent multi-user leakage
     st.session_state.gemini_key = api_key
@@ -110,23 +113,51 @@ with tab2:
             
     if st.session_state.chunks:
         with st.expander("Preview Generated Chunks"):
-            for chunk in st.session_state.chunks[:3]:
-                st.write(f"**Metadata:** {chunk.metadata}")
-                st.info(chunk.page_content[:250] + "...")
+            preview_count = {}
+            for chunk in st.session_state.chunks:
+                src = chunk.metadata.get("source", "Unknown")
+                if preview_count.get(src, 0) < 2:
+                    st.write(f"**Metadata:** {chunk.metadata}")
+                    st.info(chunk.page_content[:250] + "...")
+                    preview_count[src] = preview_count.get(src, 0) + 1
 
     st.header("3. Embedding & FAISS Indexing")
     if st.button("Build Vector Store"):
             if not st.session_state.chunks or not api_key:
                 st.warning("Ensure chunks are generated and Google API key is provided.")
             else:
-                with st.spinner("Embedding chunks using Gemini..."):
-                    embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004", google_api_key=api_key)
-                    st.session_state.vector_store = FAISS.from_documents(st.session_state.chunks, embeddings)
-                    st.session_state.vector_store.save_local("faiss_index")
+                with st.spinner("Embedding chunks using Gemini (or loading from disk)..."):
+                    embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001", google_api_key=api_key)
+                    
+                    # Define current metadata state
+                    current_meta = {
+                        "strategy": strategy,
+                        "chunk_size": chunk_size,
+                        "chunk_overlap": chunk_overlap,
+                        "documents": sorted(list({doc.metadata.get("source", "Unknown") for doc in st.session_state.documents}))
+                    }
+                    
+                    meta_path = "faiss_meta.json"
+                    index_path = "faiss_index"
+                    loaded = False
+                    
+                    if os.path.exists(meta_path) and os.path.exists(index_path):
+                        with open(meta_path, "r") as f:
+                            saved_meta = json.load(f)
+                        if saved_meta == current_meta:
+                            st.session_state.vector_store = FAISS.load_local(index_path, embeddings, allow_dangerous_deserialization=True)
+                            loaded = True
+                            
+                    if loaded:
+                        st.success("Loaded FAISS Vector store from disk! (Zero API calls used)")
+                    else:
+                        st.session_state.vector_store = FAISS.from_documents(st.session_state.chunks, embeddings)
+                        st.session_state.vector_store.save_local(index_path)
+                        with open(meta_path, "w") as f:
+                            json.dump(current_meta, f)
+                        st.success("FAISS Vector store built and persisted!")
                     
                     total_tokens_est = sum(len(c.page_content) // 4 for c in st.session_state.chunks)
-                    
-                    st.success("FAISS Vector store built and persisted!")
                     st.metric("Total Vectors Indexed", len(st.session_state.chunks))
                     st.metric("Estimated Tokens Embedded", total_tokens_est)
 
@@ -143,17 +174,19 @@ with tab3:
             start_time = time.time()
             
             # Input Guardrail Pre-Check
-            if not check_guardrails(query):
-                st.error(get_guardrail_message())
-                st.session_state.logs.append({"Time": time.strftime("%H:%M:%S"), "Query": query, "Tool": "Blocked (Input)", "Duration (s)": 0, "Guardrail": "🚨 Triggered"})
+            is_safe, triggered_kw = check_guardrails(query)
+            if not is_safe:
+                st.error(get_guardrail_message(triggered_kw))
+                st.session_state.logs.append({"Time": time.strftime("%H:%M:%S"), "Query": query, "Tool": "Blocked (Input)", "Duration (s)": 0, "Guardrail": f"🚨 Triggered ({triggered_kw})"})
             else:
                 with st.spinner("Agent routing and reasoning..."):
                     tool_used, response, details = agent_router(query, st.session_state.vector_store, api_key)
                     
                     # Output Guardrail Post-Check
-                    if not check_guardrails(response):
-                        st.error(get_guardrail_message())
-                        st.session_state.logs.append({"Time": time.strftime("%H:%M:%S"), "Query": query, "Tool": "Blocked (Output)", "Duration (s)": round(time.time()-start_time, 2), "Guardrail": "🚨 Triggered"})
+                    out_safe, out_kw = check_guardrails(response, is_input=False)
+                    if not out_safe:
+                        st.error(get_guardrail_message(out_kw))
+                        st.session_state.logs.append({"Time": time.strftime("%H:%M:%S"), "Query": query, "Tool": "Blocked (Output)", "Duration (s)": round(time.time()-start_time, 2), "Guardrail": f"🚨 Triggered ({out_kw})"})
                     else:
                         st.success("Response generated successfully.")
                         st.markdown(f"**Answer:** {response}")

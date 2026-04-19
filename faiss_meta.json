@@ -1,0 +1,10 @@
+{
+    "strategy": "Recursive",
+    "chunk_size": 600,
+    "chunk_overlap": 50,
+    "documents": [
+        "MARKDOWN-INPUT-DATA.md",
+        "PDF-INPUT-DATA.pdf",
+        "TEXT-INPUT-DATA.txt"
+    ]
+}
