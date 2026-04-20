@@ -92,8 +92,8 @@ with tab2:
     with col1:
         strategy = st.selectbox("Chunking Strategy", ["Recursive", "Paragraph", "Fixed-size"])
     with col2:
-        chunk_size = st.slider("Chunk Size", 100, 2000, 500)
-        chunk_overlap = st.slider("Chunk Overlap", 0, 500, 50)
+        chunk_size = st.slider("Chunk Size", 100, 2000, 600)
+        chunk_overlap = st.slider("Chunk Overlap", 0, 600, 50)
         
     if st.button("Apply Chunking"):
         if not st.session_state.documents:
@@ -137,8 +137,8 @@ with tab2:
                         "documents": sorted(list({doc.metadata.get("source", "Unknown") for doc in st.session_state.documents}))
                     }
                     
-                    meta_path = "faiss_meta.json"
                     index_path = "faiss_index"
+                    meta_path = "faiss_index/faiss_meta.json"
                     loaded = False
                     
                     if os.path.exists(meta_path) and os.path.exists(index_path):

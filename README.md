@@ -1,6 +1,6 @@
 # Intelligent Agentic RAG System
 
-Welcome to the Intelligent Agentic Retrieval-Augmented Generation (RAG) System. This application enables you to ingest your custom documents (PDFs, Markdown, and Text files) and interactively question an AI agent that is restricted to synthesizing answers based *only* on the provided context.
+Welcome to the Intelligent Streamlit Agentic Retrieval-Augmented Generation (RAG) System. This application enables you to ingest your custom documents (PDFs, Markdown, and Text files) and interactively question an AI agent that is restricted to synthesizing answers based *only* on the provided context.
 
 ## 🖥️ What to Expect on Launch
 
@@ -48,7 +48,7 @@ To successfully query the agent, follow these sequential steps:
 ## ✅ DOs and ❌ DON'Ts
 
 ### ✅ Do:
-* **DO** ensure your API key has access to both `gemini-2.5-flash` and `models/text-embedding-004`.
+* **DO** ensure your API key has access to both `gemini-2.5-flash` and `models/gemini-embeddings-001`.
 * **DO** rebuild the vector store (in Tab 2) if you add new files into the `data` folder. The RAG will only know about documents present during the active FAISS build.
 * **DO** regularly check **Tab 4 (Logs)** to monitor for blocked queries if your prompt triggers the system's guardrails.
 * **DO** experiment with system keywords. Asking the system to explain something "detailed", "carefully", or "thoroughly" triggers a hidden Elaborator Tool that rewrites your prompt for higher quality results.
