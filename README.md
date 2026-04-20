@@ -60,7 +60,7 @@ To successfully query the agent, follow these sequential steps:
 
 
 ```mermaid
-graph TD
+flowchart TD
     %% Define styles
     classDef default fill:#f9f9f9,stroke:#333,stroke-width:1px;
     classDef user fill:#e1f5fe,stroke:#0288d1,stroke-width:2px;
@@ -72,10 +72,10 @@ graph TD
     User((User)):::user
     
     subgraph UI ["Streamlit Frontend (app.py)"]
-        UI_Docs[Document Setup Tab]:::streamlit
-        UI_Chunk[Embeddings Tab]:::streamlit
-        UI_Chat[Chat Interface Tab]:::streamlit
-        UI_Logs[System Logs Tab]:::streamlit
+        UI_Docs["Document Setup Tab"]:::streamlit
+        UI_Chunk["Embeddings Tab"]:::streamlit
+        UI_Chat["Chat Interface Tab"]:::streamlit
+        UI_Logs["System Logs Tab"]:::streamlit
     end
 
     subgraph Data_Processing ["Data Ingestion"]
@@ -85,46 +85,52 @@ graph TD
     
     subgraph VectorDB ["FAISS Store"]
         CacheCheck{"Cache Metadata<br>Match?"}
-        FAISSSave[(Save faiss_index)]:::storage
-        FAISSLoad[(Load faiss_index)]:::storage
+        FAISSSave[("Save faiss_index")]:::storage
+        FAISSLoad[("Load faiss_index")]:::storage
     end
 
     subgraph External_NLP ["Google Generative AI"]
-        EmbeddingAPI["Embedding API<br>(gemini-embedding-001)"]:::google
-        LLM["Generative Model API<br>(Gemini Pro)"]:::google
+        EmbeddingAPI["Embedding API<br>(text-embedding-004)"]:::google
+        LLM["Generative Model API<br>(gemini-1.5-flash)"]:::google
     end
 
     subgraph Middlewares ["Security & Routing"]
         GuardIn{"Input Guardrail<br>(Regex check)"}:::security
-        Agent[Agent Router<br>(agent_tools.py)]
+        Agent["Agent Router<br>(agent_tools.py)"]
         GuardOut{"Output Guardrail<br>(Regex check)"}:::security
     end
 
-    User -->|Load Files| UI_Docs
+    %% Data Ingestion Flow
+    User -->|"Load Files"| UI_Docs
     UI_Docs --> DocLoaders
     DocLoaders --> Splitters
     Splitters --> UI_Chunk
     UI_Chunk -->|"Build Vector Store"| CacheCheck
     
-    CacheCheck -- "No (New Docs/Params)" --> EmbeddingAPI
+    CacheCheck -->|"No (New Docs/Params)"| EmbeddingAPI
     EmbeddingAPI --> FAISSSave
     
-    CacheCheck -- "Yes (Exact Match)" --> FAISSLoad
+    CacheCheck -->|"Yes (Exact Match)"| FAISSLoad
 
-    User -->|Ask Question| UI_Chat
+    %% Query Flow
+    User -->|"Ask Question"| UI_Chat
     UI_Chat --> GuardIn
     
-    GuardIn -- Fails --> BlockIn[Block & Log]:::security
-    GuardIn -- Passes --> Agent
+    GuardIn -->|"Fails"| BlockIn["Block & Log"]:::security
+    GuardIn -->|"Passes"| Agent
     
-    FAISSLoad -.->|Search Relevant Chunks| Agent
-    FAISSSave -.->|Search Relevant Chunks| Agent
+    %% RAG logic
+    FAISSLoad -.->|"Search Relevant Chunks"| Agent
+    FAISSSave -.->|"Search Relevant Chunks"| Agent
     
-    Agent <-->|Context & Query| LLM
+    %% Agent & LLM Communication (Fixed Bi-directional)
+    Agent -->|"Context & Query"| LLM
+    LLM -->|"Generated Response"| Agent
     
+    %% Output Flow
     Agent --> GuardOut
-    GuardOut -- Fails --> BlockOut[Block & Log]:::security
-    GuardOut -- Passes --> FinalOutput[Display Answer]
+    GuardOut -->|"Fails"| BlockOut["Block & Log"]:::security
+    GuardOut -->|"Passes"| FinalOutput["Display Answer"]
     
     BlockIn --> UI_Logs
     BlockOut --> UI_Logs
