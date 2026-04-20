@@ -59,7 +59,8 @@ To successfully query the agent, follow these sequential steps:
 * **DON'T** share your `faiss_index` folder publicly if your scanned PDFs contained sensitive data. The index can be reverse-engineered to extract the original text.
 
 
-flowchart TD
+```mermaid
+graph TD
     %% Define styles
     classDef default fill:#f9f9f9,stroke:#333,stroke-width:1px;
     classDef user fill:#e1f5fe,stroke:#0288d1,stroke-width:2px;
@@ -128,3 +129,4 @@ flowchart TD
     BlockIn --> UI_Logs
     BlockOut --> UI_Logs
     FinalOutput --> UI_Chat
+```
