@@ -58,6 +58,26 @@ To successfully query the agent, follow these sequential steps:
 * **DON'T** put non-text files (like images or executables) in the `data/` folder, as the built-in PyPDFLoader and TextLoader cannot process them.
 * **DON'T** share your `faiss_index` folder publicly if your scanned PDFs contained sensitive data. The index can be reverse-engineered to extract the original text.
 
+## 🛠️ Tool Flow Description (Under the Hood)
+
+The Agentic Router implements advanced query preprocessing to enhance accuracy and reduce hallucinations before your query even reaches the vector store:
+
+### 1. Strict Document Filtering via Regex Matching
+The system uses regular expressions (Regex) to parse your input for specific citation commands like `file:` or `from`. 
+When the user query explicitly demands information from a targeted source (e.g., *"What is our policy from employee_handbook.pdf?"*), the routing engine isolates the requested filename. The FAISS vector database search is then selectively filtered to *only* return chunks carrying that exact `source` metadata. By restricting the context window exclusively to the indicated document, the chance of the LLM suffering from "cross-contamination" or hallucinating facts from unrelated documents is drastically reduced.
+
+### 2. Prompt Re-engineering via Adverb Detection
+If the agent router detects analytical adverbs in your prompt—such as `thoroughly`, `detailed`, `carefully`, or `deeply`—it recognizes an intent for high-quality, comprehensive analysis. 
+Instead of sending your raw question directly to the vector search, the system redirects your query to a **Prompt Re-engineering LLM Chain** (the "Elaborator Tool"). This initial LLM pass rewrites and expands your original query into a highly optimized, multi-faceted search prompt. This re-engineered prompt is then routed to the FAISS vector database, guaranteeing that the context chunks ultimately retrieved are much richer and more deeply relevant to producing a "thorough" final response.
+
+## 💡 Challenges & Key Learnings
+
+### Standardizing Multi-Format Metadata
+One of the primary challenges encountered was securely tracking and matching metadata across vastly different file types. For example, `PyPDFLoader` automatically extracts and attaches complex dictionary objects to PDF chunks (including page numbers, authors, and absolute system paths), whereas `TextLoader` handles plain text differently and sometimes omits default properties entirely. 
+
+If the metadata structures were left inconsistent between PDFs and TXT files, the Regex filtering in the Agent Router would fail to match the source file reliably, causing search errors or leaked context.
+
+**The Solution:** This hurdle was overcome by artificially standardizing the metadata extraction during the initial ingestion loop in `app.py`. Regardless of the source loader used, the script actively writes and standardizes the `metadata["source"]` field to be exactly the clean file name (e.g., `employee_handbook.pdf` or `notes.txt`) and sets uniform baseline attributes. This guarantees the LLM tools always have a predictable schema to query against.
 
 ```mermaid
 flowchart TD
@@ -126,7 +146,7 @@ flowchart TD
     %% Agent & LLM Communication (Fixed Bi-directional)
     Agent -->|"Context & Query"| LLM
     LLM -->|"Generated Response"| Agent
-    
+    v
     %% Output Flow
     Agent --> GuardOut
     GuardOut -->|"Fails"| BlockOut["Block & Log"]:::security
